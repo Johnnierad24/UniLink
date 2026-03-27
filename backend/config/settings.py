@@ -18,15 +18,19 @@ import sys
 
 load_dotenv()
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+try:
+    from .secrets import SECRET_KEY, DB_PASSWORD, EMAIL_PASSWORD, SMS_API_KEY, TWILIO_AUTH_TOKEN
+except ImportError:
+    from .secrets_example import SECRET_KEY, DB_PASSWORD, EMAIL_PASSWORD, SMS_API_KEY, TWILIO_AUTH_TOKEN
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-secret-key-change-me")
+# Allow env override
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", SECRET_KEY)
+DB_PASSWORD = os.getenv("DB_PASSWORD", DB_PASSWORD)
+EMAIL_PASSWORD = os.getenv("DJANGO_EMAIL_PASSWORD", EMAIL_PASSWORD)
+SMS_API_KEY = os.getenv("SMS_API_KEY", SMS_API_KEY)
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", TWILIO_AUTH_TOKEN)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() == "true"
@@ -92,10 +96,10 @@ DATABASES = {
     'default': {
         'ENGINE': os.getenv("DJANGO_DB_ENGINE", "django.db.backends.sqlite3"),
         'NAME': os.getenv("DJANGO_DB_NAME", BASE_DIR / 'db.sqlite3'),
-        'USER': os.getenv("DJANGO_DB_USER", ""),
-        'PASSWORD': os.getenv("DJANGO_DB_PASSWORD", ""),
-        'HOST': os.getenv("DJANGO_DB_HOST", ""),
-        'PORT': os.getenv("DJANGO_DB_PORT", ""),
+        'USER': os.getenv("DJANGO_DB_USER", "postgres"),
+        'PASSWORD': DB_PASSWORD,
+        'HOST': os.getenv("DJANGO_DB_HOST", "localhost"),
+        'PORT': os.getenv("DJANGO_DB_PORT", "5432"),
     }
 }
 
@@ -196,17 +200,17 @@ X_FRAME_OPTIONS = "DENY"
 
 REQUIRE_EMAIL_VERIFIED = os.getenv("DJANGO_REQUIRE_EMAIL_VERIFIED", "false").lower() == "true"
 
-# Email settings (configure SMTP via env)
+# Email settings
 EMAIL_BACKEND = os.getenv("DJANGO_EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
 EMAIL_HOST = os.getenv("DJANGO_EMAIL_HOST", "")
 EMAIL_PORT = int(os.getenv("DJANGO_EMAIL_PORT", "587"))
 EMAIL_HOST_USER = os.getenv("DJANGO_EMAIL_USER", "")
-EMAIL_HOST_PASSWORD = os.getenv("DJANGO_EMAIL_PASSWORD", "")
+EMAIL_HOST_PASSWORD = EMAIL_PASSWORD
 EMAIL_USE_TLS = os.getenv("DJANGO_EMAIL_USE_TLS", "true").lower() == "true"
 DEFAULT_FROM_EMAIL = os.getenv("DJANGO_DEFAULT_FROM_EMAIL", "no-reply@unilink.local")
 EMAIL_VERIFICATION_URL = os.getenv("DJANGO_EMAIL_VERIFY_URL", "http://localhost:3000/verify-email")
 
 SMS_PROVIDER = os.getenv("SMS_PROVIDER", None)
-SMS_API_KEY = os.getenv("SMS_API_KEY", None)
+SMS_API_KEY = SMS_API_KEY
 SMS_SENDER_ID = os.getenv("SMS_SENDER_ID", "UniLink")
 SMS_RECIPIENTS = [p.strip() for p in os.getenv("SMS_RECIPIENTS", "").split(",") if p.strip()]

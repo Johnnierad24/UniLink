@@ -17,6 +17,7 @@ env/
 *.log
 local_settings.py
 db.sqlite3
+config/secrets.py
 db.sqlite3-journal
 media/
 staticfiles/
