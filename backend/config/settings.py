@@ -103,6 +103,13 @@ DATABASES = {
     }
 }
 
+# Cache configuration for rate limiting
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+    }
+}
+
 if os.getenv("POSTGRES_URL"):
     import dj_database_url
     DATABASES["default"] = dj_database_url.config(default=os.getenv("POSTGRES_URL"), conn_max_age=600)
@@ -169,6 +176,16 @@ REST_FRAMEWORK = {
         "rest_framework.filters.OrderingFilter",
     ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # Rate limiting
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "100/minute",
+        "user": "200/minute",
+        "login": "5/minute",
+    },
 }
 
 SIMPLE_JWT = {
@@ -197,6 +214,13 @@ SECURE_HSTS_PRELOAD = SECURE_HSTS_SECONDS > 0
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_BROWSER_XSS_FILTER = True
 X_FRAME_OPTIONS = "DENY"
+
+# Security Headers
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
+
+# Cache control for security
+SECURE_CACHE_CONTROL_HEADER = "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
 
 REQUIRE_EMAIL_VERIFIED = os.getenv("DJANGO_REQUIRE_EMAIL_VERIFIED", "false").lower() == "true"
 
