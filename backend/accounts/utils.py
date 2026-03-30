@@ -10,7 +10,7 @@ def make_verification_token(user_id: int) -> str:
     return SIGNER.sign(user_id)
 
 
-def verify_token(token: str, max_age_hours: int = 48) -> int:
+def verify_token(token: str, max_age_hours: int = 2) -> int:
     user_id = SIGNER.unsign(token, max_age=max_age_hours * 3600)
     return int(user_id)
 

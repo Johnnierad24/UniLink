@@ -32,8 +32,11 @@ EMAIL_PASSWORD = os.getenv("DJANGO_EMAIL_PASSWORD", EMAIL_PASSWORD)
 SMS_API_KEY = os.getenv("SMS_API_KEY", SMS_API_KEY)
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", TWILIO_AUTH_TOKEN)
 
+# Supabase configuration
+SUPABASE_URL = os.getenv("SUPABASE_URL", "avdpjuwxhgrbctikddnx.supabase.co")
+
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() == "true"
+DEBUG = os.getenv("DJANGO_DEBUG", "false").lower() == "true"
 TESTING = "test" in sys.argv
 
 ALLOWED_HOSTS = [h for h in os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",") if h] or ["localhost", "127.0.0.1"]
@@ -51,6 +54,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'rest_framework_simplejwt.token_blacklist',
     'django_filters',
     'drf_spectacular',
     'accounts',
@@ -94,8 +98,8 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': os.getenv("DJANGO_DB_ENGINE", "django.db.backends.sqlite3"),
-        'NAME': os.getenv("DJANGO_DB_NAME", BASE_DIR / 'db.sqlite3'),
+        'ENGINE': os.getenv("DJANGO_DB_ENGINE", "django.db.backends.postgresql"),
+        'NAME': os.getenv("DJANGO_DB_NAME", "unilink"),
         'USER': os.getenv("DJANGO_DB_USER", "postgres"),
         'PASSWORD': DB_PASSWORD,
         'HOST': os.getenv("DJANGO_DB_HOST", "localhost"),
@@ -104,11 +108,23 @@ DATABASES = {
 }
 
 # Cache configuration for rate limiting
+# IMPORTANT: Use Redis in production for distributed rate limiting!
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
     }
 }
+
+# Redis cache for production (uncomment and configure for production)
+# CACHES = {
+#     "default": {
+#         "BACKEND": "django.core.cache.backends.redis.RedisCache",
+#         "LOCATION": "redis://127.0.0.1:6379/1",
+#         "OPTIONS": {
+#             "CLIENT_CLASS": "django_redis.client.DefaultClient",
+#         }
+#     }
+# }
 
 if os.getenv("POSTGRES_URL"):
     import dj_database_url
@@ -134,8 +150,9 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 PASSWORD_HASHERS = [
-    'django.contrib.auth.hashers.MD5PasswordHasher',
     'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+    'django.contrib.auth.hashers.Argon2PasswordHasher',
+    'django.contrib.auth.hashers.BCryptPasswordHasher',
 ]
 
 
@@ -178,21 +195,32 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     # Rate limiting
+    # Custom throttles for different endpoints
     "DEFAULT_THROTTLE_CLASSES": [
-        "rest_framework.throttling.AnonRateThrottle",
+        "api.throttles.APIScopeRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
     ],
     "DEFAULT_THROTTLE_RATES": {
-        "anon": "100/minute",
-        "user": "200/minute",
+        "anon": "30/minute",
+        "user": "100/minute",
+        "ip": "30/minute",
         "login": "5/minute",
+        "contact": "1/hour",
+        "password_reset": "3/hour",
+        "api": "60/minute",
+        "burst": "10/minute",
+        "anon_root": "15/minute",
     },
+    "EXCEPTION_HANDLER": "rest_framework.views.exception_handler",
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
+    "UPDATE_LAST_LOGIN": True,
 }
 
 SPECTACULAR_SETTINGS = {
@@ -202,8 +230,10 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
 }
 
-# CORS settings - restrict in production
+# CORS settings - MUST be restricted in production
 CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000").split(",")
+if not os.getenv("CORS_ALLOWED_ORIGINS") and not DEBUG:
+    CORS_ALLOWED_ORIGINS = []
 CORS_ALLOW_CREDENTIALS = True
 
 

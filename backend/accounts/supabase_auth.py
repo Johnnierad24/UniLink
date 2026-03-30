@@ -1,9 +1,15 @@
 import jwt
+from jwt import PyJWKClient, PyJWKClientError
 from django.conf import settings
 from rest_framework import authentication, exceptions
 from django.contrib.auth import get_user_model
+import logging
 
+logger = logging.getLogger(__name__)
 User = get_user_model()
+
+SUPABASE_JWKS_CACHE = {}
+
 
 class SupabaseAuthentication(authentication.BaseAuthentication):
     """
@@ -26,35 +32,58 @@ class SupabaseAuthentication(authentication.BaseAuthentication):
             
         return self._authenticate_credentials(token)
     
+    def _get_jwks_client(self, supabase_url):
+        """Get or create JWKS client for the given Supabase URL."""
+        if supabase_url not in SUPABASE_JWKS_CACHE:
+            jwks_url = f"https://{supabase_url}/v1/.well-known/jwks.json"
+            SUPABASE_JWKS_CACHE[supabase_url] = PyJWKClient(jwks_url, cache_keys=True)
+        return SUPABASE_JWKS_CACHE[supabase_url]
+    
     def _authenticate_credentials(self, token):
         try:
-            # Decode without verification for now (Supabase handles this)
-            # In production, verify with Supabase JWKS
+            supabase_url = getattr(settings, 'SUPABASE_URL', 'avdpjuwxhgrbctikddnx.supabase.co')
+            
+            jwks_client = self._get_jwks_client(supabase_url)
+            
+            signing_key = jwks_client.get_signing_key_from_jwt(token)
+            
             payload = jwt.decode(
-                token, 
-                options={"verify_signature": False}
+                token,
+                signing_key.key,
+                algorithms=['RS256'],
+                audience='authenticated',
+                options={
+                    'verify_exp': True,
+                    'verify_iat': True,
+                    'require': ['exp', 'iat', 'sub', 'email']
+                }
             )
             
-            # Get user email from token
             email = payload.get('email')
             if not email:
                 raise exceptions.AuthenticationFailed('Invalid token: no email')
             
-            # Find or create user based on email
             user = User.objects.filter(email__iexact=email).first()
             
             if not user:
-                # Auto-create user from Supabase
-                username = email.split('@')[0]
-                user = User.objects.create_user(
-                    username=username,
-                    email=email,
-                    password=None,  # No password - Supabase handles auth
+                raise exceptions.AuthenticationFailed(
+                    'Account not found. Please contact administrator to provision your account.'
                 )
+            
+            if not user.is_active:
+                raise exceptions.AuthenticationFailed('User account is disabled.')
             
             return (user, token)
             
+        except PyJWKClientError as e:
+            logger.error(f"JWKS client error: {e}")
+            raise exceptions.AuthenticationFailed('Unable to validate token. Please try again.')
+        except jwt.ExpiredSignatureError:
+            raise exceptions.AuthenticationFailed('Token has expired.')
+        except jwt.InvalidAudienceError:
+            raise exceptions.AuthenticationFailed('Invalid token audience.')
         except jwt.InvalidTokenError as e:
+            logger.warning(f"Invalid token: {e}")
             raise exceptions.AuthenticationFailed(f'Invalid token: {str(e)}')
     
     def authenticate_header(self, request):

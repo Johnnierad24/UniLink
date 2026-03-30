@@ -1,6 +1,8 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import permissions, status
+from rest_framework.throttling import AnonRateThrottle
+from api.throttles import LoginRateThrottle, PasswordResetRateThrottle
 from .serializers import UserSerializer
 from .utils import make_verification_token, verify_token, send_verification_email
 from django.contrib.auth import get_user_model
@@ -15,6 +17,15 @@ class MeView(APIView):
         return Response(UserSerializer(request.user).data)
 
     def patch(self, request):
+        forbidden_fields = {'role', 'is_staff', 'is_superuser', 'is_active', 'university_id'}
+        requested_fields = set(request.data.keys())
+        
+        if requested_fields & forbidden_fields:
+            return Response(
+                {"error": {"message": "You cannot modify privileged fields"}},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         serializer = UserSerializer(request.user, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -23,6 +34,7 @@ class MeView(APIView):
 
 class EmailVerificationRequestView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [AnonRateThrottle]
 
     def post(self, request):
         if not request.user.email:
@@ -50,6 +62,7 @@ class EmailVerificationConfirmView(APIView):
 
 class PasswordResetView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [AnonRateThrottle, PasswordResetRateThrottle]
 
     def post(self, request):
         new_password = request.data.get("new_password")
@@ -60,9 +73,27 @@ class PasswordResetView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        if len(new_password) < 6:
+        if len(new_password) < 8:
             return Response(
-                {"error": {"message": "Password must be at least 6 characters"}},
+                {"error": {"message": "Password must be at least 8 characters"}},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not any(c.isupper() for c in new_password):
+            return Response(
+                {"error": {"message": "Password must contain at least one uppercase letter"}},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not any(c.islower() for c in new_password):
+            return Response(
+                {"error": {"message": "Password must contain at least one lowercase letter"}},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not any(c.isdigit() for c in new_password):
+            return Response(
+                {"error": {"message": "Password must contain at least one digit"}},
                 status=status.HTTP_400_BAD_REQUEST
             )
 

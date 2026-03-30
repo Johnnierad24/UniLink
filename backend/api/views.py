@@ -2,7 +2,18 @@ from rest_framework import viewsets, filters
 from django_filters.rest_framework import DjangoFilterBackend
 from django.core.mail import send_mail
 from django.conf import settings
+import logging
 from .models import Campus, Event, Announcement
+from .filters import SecureSearchFilter, SQLInjectionSafeFilterBackend
+from .rls import (
+    UserRLSPermission,
+    RequestedByRLSPermission,
+    LecturerRLSPermission,
+    EventAccessPermission,
+    ResourceAccessPermission,
+)
+
+logger = logging.getLogger(__name__)
 from .models import (
     Campus,
     Event,
@@ -38,8 +49,8 @@ class CampusViewSet(viewsets.ModelViewSet):
 class EventViewSet(viewsets.ModelViewSet):
     queryset = Event.objects.select_related("campus").all()
     serializer_class = EventSerializer
-    permission_classes = [IsStaffOrReadOnly]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    permission_classes = [IsAuthenticated, EventAccessPermission]
+    filter_backends = [DjangoFilterBackend, SecureSearchFilter, filters.OrderingFilter]
     filterset_fields = ["campus", "category", "is_all_day"]
     search_fields = ["title", "description", "location"]
     ordering_fields = ["start_time", "end_time", "created_at"]
@@ -48,8 +59,8 @@ class EventViewSet(viewsets.ModelViewSet):
 class AnnouncementViewSet(viewsets.ModelViewSet):
     queryset = Announcement.objects.select_related("campus").all()
     serializer_class = AnnouncementSerializer
-    permission_classes = [IsStaffOrReadOnly]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    permission_classes = [IsAuthenticated, EventAccessPermission]
+    filter_backends = [DjangoFilterBackend, SecureSearchFilter, filters.OrderingFilter]
     filterset_fields = ["campus", "is_urgent"]
     search_fields = ["title", "body"]
     ordering_fields = ["published_at"]
@@ -58,28 +69,34 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
 class ResourceViewSet(viewsets.ModelViewSet):
     queryset = Resource.objects.select_related("campus").all()
     serializer_class = ResourceSerializer
-    permission_classes = [IsStaffOrReadOnly]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    permission_classes = [IsAuthenticated, ResourceAccessPermission]
+    filter_backends = [DjangoFilterBackend, SecureSearchFilter, filters.OrderingFilter]
     filterset_fields = ["campus", "type"]
     search_fields = ["name", "location"]
     ordering_fields = ["name", "capacity"]
 
 
 class BookingViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
+    permission_classes = [IsAuthenticated, UserRLSPermission]
     serializer_class = BookingSerializer
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ["resource", "status", "resource__campus"]
     ordering_fields = ["start_time", "end_time", "created_at"]
 
     def get_queryset(self):
-        return Booking.objects.select_related("resource", "user").filter(user=self.request.user)
+        user = self.request.user
+        if user.role.lower() in ['admin', 'staff']:
+            return Booking.objects.select_related("resource", "user").all()
+        return Booking.objects.select_related("resource", "user").filter(user=user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
 
 class ProcurementRequestViewSet(viewsets.ModelViewSet):
     serializer_class = ProcurementRequestSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, filters.OrderingFilter, filters.SearchFilter]
+    permission_classes = [IsAuthenticated, RequestedByRLSPermission]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter, SecureSearchFilter]
     filterset_fields = ["priority", "status", "linked_event", "requested_by"]
     ordering_fields = ["created_at", "estimated_cost"]
     search_fields = ["title", "description"]
@@ -87,9 +104,9 @@ class ProcurementRequestViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = ProcurementRequest.objects.select_related("requested_by", "linked_event")
         user = self.request.user
-        if user.is_anonymous:
+        if not user.is_authenticated:
             return qs.none()
-        if user.role in ["admin", "staff"]:
+        if user.role.lower() in ["admin", "staff"]:
             return qs
         return qs.filter(requested_by=user)
 
@@ -98,7 +115,7 @@ class ProcurementRequestViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["patch"], permission_classes=[IsAuthenticated])
     def status(self, request, pk=None):
-        if request.user.role not in ["admin", "staff"]:
+        if request.user.role.lower() not in ["admin", "staff"]:
             return Response(status=status.HTTP_403_FORBIDDEN)
         instance = self.get_object()
         serializer = ProcurementStatusSerializer(instance, data=request.data, partial=True)
@@ -110,8 +127,8 @@ class ProcurementRequestViewSet(viewsets.ModelViewSet):
 class ScheduleEntryViewSet(viewsets.ModelViewSet):
     queryset = ScheduleEntry.objects.select_related("campus", "lecturer", "department").all()
     serializer_class = ScheduleEntrySerializer
-    permission_classes = [IsStaffOrReadOnly]
-    filter_backends = [DjangoFilterBackend, filters.OrderingFilter, filters.SearchFilter]
+    permission_classes = [IsStaffOrReadOnly, LecturerRLSPermission]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter, SecureSearchFilter]
     filterset_fields = ["campus", "audience", "lecturer", "department"]
     ordering_fields = ["start_time", "end_time"]
     search_fields = ["title", "course_code", "room"]
@@ -119,12 +136,20 @@ class ScheduleEntryViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = super().get_queryset()
         user = self.request.user
-        if user.is_authenticated:
-            if user.role == "lecturer":
-                return qs.filter(lecturer=user)
-            elif user.role == "student" and user.department:
-                return qs.filter(department=user.department)
-        return qs
+        
+        if not user.is_authenticated:
+            return qs.none()
+        
+        if user.role.lower() in ["admin", "staff"]:
+            return qs
+        
+        if user.role == "lecturer":
+            return qs.filter(lecturer=user)
+        
+        if user.role == "student" and hasattr(user, 'department') and user.department:
+            return qs.filter(department=user.department)
+        
+        return qs.none()
 
     @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
     def postpone(self, request, pk=None):
@@ -188,14 +213,14 @@ UniLink System
                 )
                 email_sent = True
             except Exception as e:
-                print(f"Email error: {e}")
+                logger.error(f"Email error: {e}")
         
         if student_names:
             try:
                 self._send_sms(student_names, sms_message)
                 sms_sent = True
             except Exception as e:
-                print(f"SMS error: {e}")
+                logger.error(f"SMS error: {e}")
         
         entry.is_postponed = True
         entry.postponed_reason = reason
@@ -228,7 +253,7 @@ UniLink System
         elif provider == 'twilio':
             return self._send_via_twilio(message)
         else:
-            print(f"SMS would be sent to {len(recipients)} recipients: {message}")
+            logger.info(f"SMS would be sent to {len(recipients)} recipients")
             return True
     
     def _send_via_africastalking(self, message):
@@ -237,7 +262,7 @@ UniLink System
         sender_id = getattr(settings, 'SMS_SENDER_ID', 'UniLink')
         
         if not api_key:
-            print("Africa's Talking API key not configured")
+            logger.warning("Africa's Talking API key not configured")
             return False
         
         headers = {
@@ -264,7 +289,7 @@ UniLink System
         from_number = getattr(settings, 'TWILIO_PHONE_NUMBER', None)
         
         if not all([account_sid, auth_token, from_number]):
-            print("Twilio credentials not configured")
+            logger.warning("Twilio credentials not configured")
             return False
         
         client = Client(account_sid, auth_token)
