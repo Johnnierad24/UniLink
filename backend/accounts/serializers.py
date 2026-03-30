@@ -28,10 +28,6 @@ class UserSerializer(serializers.ModelSerializer):
             "notification_prefs",
         ]
 
-    def get_campus_id(self):
-        from api.models import Campus
-        return Campus.objects.all()
-
     def get_department(self, obj):
         if obj.department:
             return {"id": obj.department.id, "name": obj.department.name, "code": obj.department.code}
