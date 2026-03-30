@@ -1,16 +1,15 @@
-# Core Django
+# UniLink Backend Dependencies
+# Pin exact versions to prevent supply chain attacks
+
 Django==6.0.3
 djangorestframework==3.17.1
 djangorestframework-simplejwt==5.5.1
 django-cors-headers==4.9.0
 django-filter==25.2
 python-dotenv==1.2.2
-
-# API Documentation
 drf-spectacular==0.29.0
-
-# Database (SQLite3 is built-in, for PostgreSQL use psycopg2)
-# psycopg2-binary==2.9.9
-
-# Utilities
 PyYAML==6.0.3
+
+# Security audit
+# Run: pip install pip-audit
+# Run: pip-audit to check for vulnerabilities
