@@ -266,7 +266,7 @@ class _SchedulePageState extends State<SchedulePage> {
                   contentPadding:
                       EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
-                value: _selectedCampusId,
+                initialValue: _selectedCampusId,
                 items: [
                   const DropdownMenuItem(value: 0, child: Text('All Campuses')),
                   ..._campuses.map((c) => DropdownMenuItem(

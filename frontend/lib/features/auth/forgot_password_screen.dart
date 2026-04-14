@@ -18,7 +18,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   bool _obscureConfirm = true;
   bool _loading = false;
   String? _error;
-  String? _successMessage;
   int _step = 1;
 
   @override

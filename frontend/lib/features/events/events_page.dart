@@ -87,7 +87,7 @@ class _EventsPageState extends State<EventsPage> {
                   contentPadding:
                       EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
-                value: _selectedCampusId,
+                initialValue: _selectedCampusId,
                 items: [
                   const DropdownMenuItem(
                       value: null, child: Text('All Campuses')),

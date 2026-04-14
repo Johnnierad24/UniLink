@@ -221,7 +221,7 @@ class _ProcurementPageState extends State<ProcurementPage>
                     labelText: 'Link to Event (optional)',
                     prefixIcon: Icon(Icons.event),
                   ),
-                  value: selectedEvent,
+                  initialValue: selectedEvent,
                   items: [
                     const DropdownMenuItem(
                       value: null,
