@@ -1,14 +1,13 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config.dart';
 
 class AuthService {
   static const _accessKey = 'unilink_access';
+  static const _refreshKey = 'unilink_refresh';
   static const _userKey = 'unilink_user';
 
-  final SupabaseClient _supabase = Supabase.instance.client;
   final http.Client _client;
   SharedPreferences? _prefs;
 
@@ -21,87 +20,56 @@ class AuthService {
 
   Future<AuthResult> login(String login, String password) async {
     try {
-      // Supabase Auth: login with email (use login as email if it contains @)
-      String email = login;
-      if (!login.contains('@')) {
-        // For university ID, construct email or use as-is
-        email = '$login@students.unilink.edu';
-      }
+      final res = await _client
+          .post(
+            Uri.parse('$apiBaseUrl/api/auth/token/'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'login': login, 'password': password}),
+          )
+          .timeout(const Duration(seconds: 10));
 
-      final response = await _supabase.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
+      print('Login response: ${res.statusCode}');
 
-      if (response.session != null) {
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
         final prefs = await _getPrefs();
-        await prefs.setString(_accessKey, response.session!.accessToken);
-
-        // Get user data from Django using the Supabase token
-        final userInfo =
-            await _fetchUserFromDjango(response.session!.accessToken);
-        if (userInfo != null) {
-          await prefs.setString(_userKey, jsonEncode(userInfo.toJson()));
-          return AuthResult.success(userInfo!);
-        }
-
-        // If Django fetch fails, create basic user from Supabase
-        final user = response.user!;
-        final basicUserInfo = UserInfo(
-          id: user.id.hashCode,
-          username: user.email?.split('@').first ?? 'user',
-          email: user.email,
-          role: 'student',
-          campusId: null,
-          departmentId: null,
-        );
-        await prefs.setString(_userKey, jsonEncode(basicUserInfo.toJson()));
-        return AuthResult.success(basicUserInfo);
+        await prefs.setString(_accessKey, data['access']);
+        await prefs.setString(_refreshKey, data['refresh']);
+        await prefs.setString(_userKey, jsonEncode(data['user']));
+        return AuthResult.success(UserInfo.fromJson(data['user']));
       }
 
-      return AuthResult.failure('Login failed');
+      print('Login failed: ${res.body}');
+      final err =
+          res.statusCode == 401 ? 'Invalid credentials' : 'Login failed';
+      return AuthResult.failure(err);
     } catch (e) {
-      return AuthResult.failure(_getErrorMessage(e.toString()));
+      print('Login error: $e');
+      return AuthResult.failure('Connection error: $e');
     }
   }
 
-  Future<UserInfo?> _fetchUserFromDjango(String token) async {
-    try {
-      final uri = Uri.parse('$apiBaseUrl/api/auth/me/');
-      final response = await _client.get(
-        uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return UserInfo.fromJson(data);
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  String _getErrorMessage(String error) {
-    if (error.contains('invalid_credentials')) return 'Invalid credentials';
-    if (error.contains('user_not_found')) return 'User not found';
-    if (error.contains('email_not_confirmed'))
-      return 'Please verify your email';
-    return 'Login failed';
-  }
-
   Future<void> logout() async {
-    await _supabase.auth.signOut();
     final prefs = await _getPrefs();
     await prefs.remove(_accessKey);
+    await prefs.remove(_refreshKey);
+    await prefs.remove(_userKey);
+  }
+
+  // Check for active session - returns null to show welcome screen
+  // (Supabase session check would go here if using Supabase auth)
+  dynamic getSupabaseSession() => null;
+
+  Future<void> clearStoredUser() async {
+    final prefs = await _getPrefs();
+    await prefs.remove(_accessKey);
+    await prefs.remove(_refreshKey);
     await prefs.remove(_userKey);
   }
 
   Future<String?> getAccessToken() async {
-    final session = _supabase.auth.currentSession;
-    return session?.accessToken;
+    final prefs = await _getPrefs();
+    return prefs.getString(_accessKey);
   }
 
   Future<UserInfo?> getStoredUser() async {
@@ -112,8 +80,8 @@ class AuthService {
   }
 
   Future<bool> isLoggedIn() async {
-    final session = _supabase.auth.currentSession;
-    return session != null;
+    final token = await getAccessToken();
+    return token != null && token.isNotEmpty;
   }
 
   Future<http.Response> get(String path, {Map<String, String>? query}) async {
@@ -154,34 +122,29 @@ class UserInfo {
   final int? campusId;
   final int? departmentId;
 
-  UserInfo({
-    required this.id,
-    required this.username,
-    this.email,
-    required this.role,
-    this.campusId,
-    this.departmentId,
-  });
+  UserInfo(
+      {required this.id,
+      required this.username,
+      this.email,
+      required this.role,
+      this.campusId,
+      this.departmentId});
 
   factory UserInfo.fromJson(Map<String, dynamic> json) => UserInfo(
-        id: json['id'] ?? json['id']?.hashCode ?? 0,
-        username: json['username'] ?? json['email']?.split('@').first ?? 'user',
+        id: json['id'],
+        username: json['username'],
         email: json['email'],
-        role: json['role'] ?? 'student',
-        campusId: json['campus_id'] ?? json['campus']?['id'],
-        departmentId: json['department_id'] ?? json['department']?['id'],
+        role: json['role'],
+        campusId: json['campus_id'],
+        departmentId: json['department_id'],
       );
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'username': username,
-        'email': email,
-        'role': role,
-        'campus_id': campusId,
-        'department_id': departmentId,
-      };
-
-  bool get isStaff => role == 'staff' || role == 'admin';
+  bool get isStaff =>
+      role == 'staff' ||
+      role == 'admin' ||
+      role == 'procurement' ||
+      role == 'director' ||
+      role == 'coordinator';
 }
 
 class AuthResult {

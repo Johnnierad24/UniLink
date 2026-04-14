@@ -117,6 +117,7 @@ class BookingSerializer(serializers.ModelSerializer):
 
 class ProcurementRequestSerializer(serializers.ModelSerializer):
     requested_by = serializers.HiddenField(default=serializers.CurrentUserDefault())
+    approved_by = serializers.SerializerMethodField()
 
     class Meta:
         model = ProcurementRequest
@@ -130,10 +131,16 @@ class ProcurementRequestSerializer(serializers.ModelSerializer):
             "requested_by",
             "linked_event",
             "reason",
+            "approved_by",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["status", "reason", "created_at", "updated_at"]
+        read_only_fields = ["status", "reason", "approved_by", "created_at", "updated_at"]
+
+    def get_approved_by(self, obj):
+        if obj.approved_by:
+            return {"id": obj.approved_by.id, "username": obj.approved_by.username}
+        return None
 
 
 class ProcurementStatusSerializer(serializers.ModelSerializer):

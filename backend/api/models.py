@@ -121,6 +121,7 @@ class ProcurementRequest(models.Model):
     requested_by = models.ForeignKey("accounts.User", related_name="procurements", on_delete=models.CASCADE)
     linked_event = models.ForeignKey(Event, related_name="procurements", on_delete=models.SET_NULL, null=True, blank=True)
     reason = models.TextField(blank=True)
+    approved_by = models.ForeignKey("accounts.User", related_name="approved_procurements", on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

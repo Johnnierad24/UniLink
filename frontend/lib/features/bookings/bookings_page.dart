@@ -16,6 +16,7 @@ class _BookingsPageState extends State<BookingsPage> {
   bool _loading = true;
   String? _error;
   int _tabIndex = 0;
+  String _search = '';
 
   @override
   void initState() {
@@ -64,6 +65,28 @@ class _BookingsPageState extends State<BookingsPage> {
     } catch (_) {
       return dateStr;
     }
+  }
+
+  List<dynamic> get _filteredBookings {
+    if (_search.isEmpty) return _bookings;
+    final q = _search.toLowerCase();
+    return _bookings.where((b) {
+      final resourceName =
+          b['resource']?['name']?.toString().toLowerCase() ?? '';
+      final notes = b['notes']?.toString().toLowerCase() ?? '';
+      return resourceName.contains(q) || notes.contains(q);
+    }).toList();
+  }
+
+  List<dynamic> get _filteredResources {
+    if (_search.isEmpty) return _resources;
+    final q = _search.toLowerCase();
+    return _resources.where((r) {
+      final name = r['name']?.toString().toLowerCase() ?? '';
+      final type = r['type']?.toString().toLowerCase() ?? '';
+      final location = r['location']?.toString().toLowerCase() ?? '';
+      return name.contains(q) || type.contains(q) || location.contains(q);
+    }).toList();
   }
 
   void _showBookingDialog(dynamic resource) {
@@ -336,6 +359,22 @@ class _BookingsPageState extends State<BookingsPage> {
                   onSelectionChanged: (s) =>
                       setState(() => _tabIndex = s.first),
                 ),
+                const SizedBox(height: 12),
+                TextField(
+                  decoration: InputDecoration(
+                    hintText: 'Search bookings or resources...',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _search.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              setState(() => _search = '');
+                            },
+                          )
+                        : null,
+                  ),
+                  onChanged: (v) => setState(() => _search = v),
+                ),
               ],
             ),
           ),
@@ -357,30 +396,37 @@ class _BookingsPageState extends State<BookingsPage> {
                         ),
                       )
                     : _tabIndex == 0
-                        ? _bookings.isEmpty
-                            ? const Center(child: Text('No bookings yet'))
-                            : ListView.builder(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 16),
-                                itemCount: _bookings.length,
-                                itemBuilder: (ctx, i) => _BookingCard(
-                                  booking: _bookings[i],
-                                  formatDate: _formatDateTime,
-                                  onCancel: () =>
-                                      _cancelBooking(_bookings[i]['id']),
-                                ),
+                        ? (_filteredBookings.isEmpty
+                            ? Center(
+                                child: Text(_search.isEmpty
+                                    ? 'No bookings yet'
+                                    : 'No matching bookings'),
                               )
-                        : _resources.isEmpty
-                            ? const Center(
-                                child: Text('No resources available'))
                             : ListView.builder(
                                 padding:
                                     const EdgeInsets.symmetric(horizontal: 16),
-                                itemCount: _resources.length,
+                                itemCount: _filteredBookings.length,
+                                itemBuilder: (ctx, i) => _BookingCard(
+                                  booking: _filteredBookings[i],
+                                  formatDate: _formatDateTime,
+                                  onCancel: () => _cancelBooking(
+                                      _filteredBookings[i]['id']),
+                                ),
+                              ))
+                        : _filteredResources.isEmpty
+                            ? Center(
+                                child: Text(_search.isEmpty
+                                    ? 'No resources available'
+                                    : 'No matching resources'),
+                              )
+                            : ListView.builder(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 16),
+                                itemCount: _filteredResources.length,
                                 itemBuilder: (ctx, i) => _ResourceCard(
-                                  resource: _resources[i],
+                                  resource: _filteredResources[i],
                                   onBook: () =>
-                                      _showBookingDialog(_resources[i]),
+                                      _showBookingDialog(_filteredResources[i]),
                                 ),
                               ),
           ),

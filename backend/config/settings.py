@@ -18,25 +18,18 @@ import sys
 
 load_dotenv()
 
+# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-try:
-    from .secrets import SECRET_KEY, DB_PASSWORD, EMAIL_PASSWORD, SMS_API_KEY, TWILIO_AUTH_TOKEN
-except ImportError:
-    from .secrets_example import SECRET_KEY, DB_PASSWORD, EMAIL_PASSWORD, SMS_API_KEY, TWILIO_AUTH_TOKEN
 
-# Allow env override
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", SECRET_KEY)
-DB_PASSWORD = os.getenv("DB_PASSWORD", DB_PASSWORD)
-EMAIL_PASSWORD = os.getenv("DJANGO_EMAIL_PASSWORD", EMAIL_PASSWORD)
-SMS_API_KEY = os.getenv("SMS_API_KEY", SMS_API_KEY)
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", TWILIO_AUTH_TOKEN)
+# Quick-start development settings - unsuitable for production
+# See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# Supabase configuration
-SUPABASE_URL = os.getenv("SUPABASE_URL", "avdpjuwxhgrbctikddnx.supabase.co")
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-secret-key-change-me")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DJANGO_DEBUG", "false").lower() == "true"
+DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() == "true"
 TESTING = "test" in sys.argv
 
 ALLOWED_HOSTS = [h for h in os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",") if h] or ["localhost", "127.0.0.1"]
@@ -54,7 +47,6 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'rest_framework_simplejwt.token_blacklist',
     'django_filters',
     'drf_spectacular',
     'accounts',
@@ -98,33 +90,14 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': os.getenv("DJANGO_DB_ENGINE", "django.db.backends.postgresql"),
-        'NAME': os.getenv("DJANGO_DB_NAME", "unilink"),
-        'USER': os.getenv("DJANGO_DB_USER", "postgres"),
-        'PASSWORD': DB_PASSWORD,
-        'HOST': os.getenv("DJANGO_DB_HOST", "localhost"),
-        'PORT': os.getenv("DJANGO_DB_PORT", "5432"),
+        'ENGINE': os.getenv("DJANGO_DB_ENGINE", "django.db.backends.sqlite3"),
+        'NAME': os.getenv("DJANGO_DB_NAME", BASE_DIR / 'db.sqlite3'),
+        'USER': os.getenv("DJANGO_DB_USER", ""),
+        'PASSWORD': os.getenv("DJANGO_DB_PASSWORD", ""),
+        'HOST': os.getenv("DJANGO_DB_HOST", ""),
+        'PORT': os.getenv("DJANGO_DB_PORT", ""),
     }
 }
-
-# Cache configuration for rate limiting
-# IMPORTANT: Use Redis in production for distributed rate limiting!
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-    }
-}
-
-# Redis cache for production (uncomment and configure for production)
-# CACHES = {
-#     "default": {
-#         "BACKEND": "django.core.cache.backends.redis.RedisCache",
-#         "LOCATION": "redis://127.0.0.1:6379/1",
-#         "OPTIONS": {
-#             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-#         }
-#     }
-# }
 
 if os.getenv("POSTGRES_URL"):
     import dj_database_url
@@ -150,9 +123,8 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.MD5PasswordHasher',
     'django.contrib.auth.hashers.PBKDF2PasswordHasher',
-    'django.contrib.auth.hashers.Argon2PasswordHasher',
-    'django.contrib.auth.hashers.BCryptPasswordHasher',
 ]
 
 
@@ -180,7 +152,6 @@ AUTH_USER_MODEL = "accounts.User"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "accounts.supabase_auth.SupabaseAuthentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": [
@@ -194,33 +165,12 @@ REST_FRAMEWORK = {
         "rest_framework.filters.OrderingFilter",
     ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
-    # Rate limiting
-    # Custom throttles for different endpoints
-    "DEFAULT_THROTTLE_CLASSES": [
-        "api.throttles.APIScopeRateThrottle",
-        "rest_framework.throttling.UserRateThrottle",
-    ],
-    "DEFAULT_THROTTLE_RATES": {
-        "anon": "30/minute",
-        "user": "100/minute",
-        "ip": "30/minute",
-        "login": "5/minute",
-        "contact": "1/hour",
-        "password_reset": "3/hour",
-        "api": "60/minute",
-        "burst": "10/minute",
-        "anon_root": "15/minute",
-    },
-    "EXCEPTION_HANDLER": "rest_framework.views.exception_handler",
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
-    "ROTATE_REFRESH_TOKENS": True,
-    "BLACKLIST_AFTER_ROTATION": True,
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "AUTH_HEADER_TYPES": ("Bearer",),
-    "UPDATE_LAST_LOGIN": True,
 }
 
 SPECTACULAR_SETTINGS = {
@@ -230,11 +180,7 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
 }
 
-# CORS settings - MUST be restricted in production
-CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000").split(",")
-if not os.getenv("CORS_ALLOWED_ORIGINS") and not DEBUG:
-    CORS_ALLOWED_ORIGINS = []
-CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = True
 
 
 
@@ -248,26 +194,19 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_BROWSER_XSS_FILTER = True
 X_FRAME_OPTIONS = "DENY"
 
-# Security Headers
-SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
-SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
-
-# Cache control for security
-SECURE_CACHE_CONTROL_HEADER = "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
-
 REQUIRE_EMAIL_VERIFIED = os.getenv("DJANGO_REQUIRE_EMAIL_VERIFIED", "false").lower() == "true"
 
-# Email settings
+# Email settings (configure SMTP via env)
 EMAIL_BACKEND = os.getenv("DJANGO_EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
 EMAIL_HOST = os.getenv("DJANGO_EMAIL_HOST", "")
 EMAIL_PORT = int(os.getenv("DJANGO_EMAIL_PORT", "587"))
 EMAIL_HOST_USER = os.getenv("DJANGO_EMAIL_USER", "")
-EMAIL_HOST_PASSWORD = EMAIL_PASSWORD
+EMAIL_HOST_PASSWORD = os.getenv("DJANGO_EMAIL_PASSWORD", "")
 EMAIL_USE_TLS = os.getenv("DJANGO_EMAIL_USE_TLS", "true").lower() == "true"
 DEFAULT_FROM_EMAIL = os.getenv("DJANGO_DEFAULT_FROM_EMAIL", "no-reply@unilink.local")
 EMAIL_VERIFICATION_URL = os.getenv("DJANGO_EMAIL_VERIFY_URL", "http://localhost:3000/verify-email")
 
 SMS_PROVIDER = os.getenv("SMS_PROVIDER", None)
-SMS_API_KEY = SMS_API_KEY
+SMS_API_KEY = os.getenv("SMS_API_KEY", None)
 SMS_SENDER_ID = os.getenv("SMS_SENDER_ID", "UniLink")
 SMS_RECIPIENTS = [p.strip() for p in os.getenv("SMS_RECIPIENTS", "").split(",") if p.strip()]

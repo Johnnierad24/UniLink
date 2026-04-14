@@ -38,8 +38,16 @@ class _SchedulePageState extends State<SchedulePage> {
       final userId = auth.user?.id;
 
       String scheduleEndpoint = '/api/schedule/';
+      // Lecturers see their own schedule, students see their department's
+      // Directors/coordinators/staff see all schedules
       if (role == 'lecturer') {
         scheduleEndpoint = '/api/schedule/?lecturer=$userId';
+      } else if (role != 'director' &&
+          role != 'coordinator' &&
+          role != 'admin' &&
+          role != 'staff') {
+        // Students - show all for now so they can see data
+        scheduleEndpoint = '/api/schedule/';
       }
 
       final resSchedule = await auth.authService.get(scheduleEndpoint);

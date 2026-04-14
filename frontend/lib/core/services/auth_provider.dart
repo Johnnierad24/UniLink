@@ -17,7 +17,11 @@ class AuthProvider extends ChangeNotifier {
   AuthService get authService => _auth;
 
   Future<void> init() async {
-    _user = await _auth.getStoredUser();
+    // Only restore user if there's an active Supabase session
+    final session = _auth.getSupabaseSession();
+    if (session != null) {
+      _user = await _auth.getStoredUser();
+    }
     _initialized = true;
     notifyListeners();
   }

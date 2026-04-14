@@ -37,4 +37,31 @@ class UniLinkTheme {
       ),
     );
   }
+
+  static ThemeData get dark {
+    return ThemeData(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: _primary,
+        primary: _primary,
+        secondary: _secondary,
+        brightness: Brightness.dark,
+      ),
+      useMaterial3: true,
+      fontFamily: 'Public Sans',
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Color(0xFF1A1A2E),
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      scaffoldBackgroundColor: const Color(0xFF16162A),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: const Color(0xFF1A1A2E),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFF2D2D44)),
+        ),
+      ),
+    );
+  }
 }

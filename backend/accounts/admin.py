@@ -1,12 +1,28 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from django import forms
 from .models import User
 
 
-@admin.register(User)
+class UserAdminForm(forms.ModelForm):
+    class Meta:
+        model = User
+        fields = '__all__'
+
+
+class UserCreationForm(forms.ModelForm):
+    class Meta:
+        model = User
+        fields = ('username',)
+
+
 class UserAdmin(DjangoUserAdmin):
-    fieldsets = DjangoUserAdmin.fieldsets + (
-        ("UniLink", {"fields": ("role", "campus", "department", "university_id", "avatar_url", "notification_prefs")}),
-    )
-    list_display = ("username", "email", "university_id", "role", "campus", "department", "is_staff")
-    list_filter = ("role", "campus", "department", "is_staff")
+    form = UserAdminForm
+    add_form = UserCreationForm
+    list_display = ('username', 'email', 'role', 'campus', 'is_staff')
+    list_filter = ('role', 'campus', 'is_staff')
+    search_fields = ('username', 'email')
+    ordering = ('username',)
+
+
+admin.site.register(User, UserAdmin)

@@ -8,6 +8,7 @@ import '../events/events_page.dart';
 import '../bookings/bookings_page.dart';
 import '../procurement/procurement_page.dart';
 import '../schedule/schedule_page.dart';
+import '../profile/profile_page.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -19,6 +20,13 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
   List<dynamic> _notifications = [];
+  final Set<String> _readNotifications = {};
+
+  void markAsRead(String id) {
+    setState(() {
+      _readNotifications.add(id);
+    });
+  }
 
   @override
   void initState() {
@@ -29,7 +37,7 @@ class _HomeShellState extends State<HomeShell> {
   List<NavigationDestination> _getDestinations() {
     final auth = context.read<AuthProvider>();
     final role = auth.user?.role ?? 'student';
-    final isStaffOrAdmin = role == 'staff' || role == 'admin';
+    final isProcurement = role == 'procurement';
 
     final destinations = <NavigationDestination>[
       const NavigationDestination(
@@ -42,44 +50,64 @@ class _HomeShellState extends State<HomeShell> {
         selectedIcon: Icon(Icons.event),
         label: 'Events',
       ),
-      const NavigationDestination(
+    ];
+
+    // Hide Booking tab for procurement staff
+    if (!isProcurement) {
+      destinations.add(const NavigationDestination(
         icon: Icon(Icons.layers_outlined),
         selectedIcon: Icon(Icons.layers),
         label: 'Booking',
-      ),
-      const NavigationDestination(
-        icon: Icon(Icons.schedule_outlined),
-        selectedIcon: Icon(Icons.schedule),
-        label: 'Schedule',
-      ),
-    ];
-
-    if (isStaffOrAdmin) {
-      destinations.add(const NavigationDestination(
-        icon: Icon(Icons.shopping_cart_outlined),
-        selectedIcon: Icon(Icons.shopping_cart),
-        label: 'Procure',
       ));
     }
+
+    destinations.add(const NavigationDestination(
+      icon: Icon(Icons.schedule_outlined),
+      selectedIcon: Icon(Icons.schedule),
+      label: 'Schedule',
+    ));
+
+    // Procurement tab visible to: procurement, director, coordinator
+    final canViewProcurement =
+        role == 'procurement' || role == 'director' || role == 'coordinator';
+    if (canViewProcurement) {
+      destinations.add(NavigationDestination(
+        icon: const Icon(Icons.shopping_cart_outlined),
+        selectedIcon: const Icon(Icons.shopping_cart),
+        label: isProcurement ? 'Approvals' : 'Procure',
+      ));
+    }
+
+    destinations.add(const NavigationDestination(
+      icon: Icon(Icons.person_outline),
+      selectedIcon: Icon(Icons.person),
+      label: 'Profile',
+    ));
 
     return destinations;
   }
 
   Widget _getPage(int index) {
-    switch (index) {
-      case 0:
-        return const DashboardPage();
-      case 1:
-        return const EventsPage();
-      case 2:
-        return const BookingsPage();
-      case 3:
-        return const SchedulePage();
-      case 4:
-        return const ProcurementPage();
-      default:
-        return const DashboardPage();
+    final auth = context.read<AuthProvider>();
+    final role = auth.user?.role ?? 'student';
+    final isProcurement = role == 'procurement';
+    final canViewProcurement =
+        role == 'procurement' || role == 'director' || role == 'coordinator';
+
+    // Build page list based on role
+    final pages = <Widget>[
+      const DashboardPage(),
+      const EventsPage(),
+      if (!isProcurement) const BookingsPage(),
+      const SchedulePage(),
+      if (canViewProcurement) const ProcurementPage(),
+      const ProfilePage(),
+    ];
+
+    if (index >= 0 && index < pages.length) {
+      return pages[index];
     }
+    return const DashboardPage();
   }
 
   Future<void> _fetchNotifications() async {
@@ -136,6 +164,24 @@ class _HomeShellState extends State<HomeShell> {
                   Text('Notifications',
                       style: Theme.of(context).textTheme.titleLarge),
                   const Spacer(),
+                  if (_notifications.isNotEmpty)
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          for (var n in _notifications) {
+                            _readNotifications
+                                .add(n['id']?.toString() ?? n['title']);
+                          }
+                        });
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content:
+                                  Text('All notifications marked as read')),
+                        );
+                      },
+                      child: const Text('Mark all read'),
+                    ),
                   IconButton(
                     icon: const Icon(Icons.refresh),
                     onPressed: () {
@@ -194,10 +240,19 @@ class _HomeShellState extends State<HomeShell> {
     }
   }
 
+  int get _unreadCount {
+    int count = 0;
+    for (var n in _notifications) {
+      final id = n['id']?.toString() ?? n['title'];
+      if (!_readNotifications.contains(id)) count++;
+    }
+    return count;
+  }
+
   @override
   Widget build(BuildContext context) {
     context.watch<AuthProvider>();
-    final urgentCount = _notifications.length;
+    final urgentCount = _unreadCount;
     final destinations = _getDestinations();
 
     return Scaffold(
@@ -316,8 +371,19 @@ class _NotificationTile extends StatelessWidget {
             )
           : null,
       isThreeLine: body.isNotEmpty && startTime != null,
-      onTap: () => _showNotificationDetails(context),
+      onTap: () {
+        _markAsRead(context);
+        _showNotificationDetails(context);
+      },
     );
+  }
+
+  void _markAsRead(BuildContext ctx) {
+    final homeState = ctx.findAncestorStateOfType<_HomeShellState>();
+    if (homeState != null) {
+      final id = notification['id']?.toString() ?? notification['title'];
+      homeState.markAsRead(id);
+    }
   }
 
   void _showNotificationDetails(BuildContext context) {

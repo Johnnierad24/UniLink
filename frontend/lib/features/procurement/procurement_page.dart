@@ -10,16 +10,33 @@ class ProcurementPage extends StatefulWidget {
   State<ProcurementPage> createState() => _ProcurementPageState();
 }
 
-class _ProcurementPageState extends State<ProcurementPage> {
+class _ProcurementPageState extends State<ProcurementPage>
+    with SingleTickerProviderStateMixin {
   List<dynamic> _requests = [];
   List<dynamic> _events = [];
   bool _loading = true;
   String? _error;
+  late TabController _tabController;
+  String _filterStatus = 'all';
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     _fetchRequests();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  List<dynamic> get _filteredRequests {
+    if (_filterStatus == 'all') return _requests;
+    return _requests
+        .where((r) => (r['status'] ?? '').toLowerCase() == _filterStatus)
+        .toList();
   }
 
   Future<void> _fetchRequests() async {
@@ -64,6 +81,66 @@ class _ProcurementPageState extends State<ProcurementPage> {
         return Colors.red[100]!;
       default:
         return Colors.amber[100]!;
+    }
+  }
+
+  Future<void> _submitProcurement(
+    BuildContext dialogContext,
+    TextEditingController titleCtrl,
+    TextEditingController descriptionCtrl,
+    TextEditingController costCtrl,
+    String priority,
+    TextEditingController reasonCtrl,
+    dynamic selectedEvent,
+  ) async {
+    try {
+      final auth = context.read<AuthProvider>();
+      final body = {
+        'title': titleCtrl.text,
+        'description': descriptionCtrl.text,
+        'estimated_cost': double.parse(costCtrl.text),
+        'priority': priority,
+        'reason': reasonCtrl.text,
+        if (selectedEvent != null) 'linked_event': selectedEvent['id'],
+      };
+
+      final res = await auth.authService.post('/api/procurements/', body: body);
+
+      if (res.statusCode == 201) {
+        if (mounted) {
+          Navigator.pop(dialogContext);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.white),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text('Request sent to Procurement Office!'),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 4),
+            ),
+          );
+          _fetchRequests();
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed: ${jsonDecode(res.body)}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -189,49 +266,41 @@ class _ProcurementPageState extends State<ProcurementPage> {
                   return;
                 }
 
-                try {
-                  final auth = context.read<AuthProvider>();
-                  final body = {
-                    'title': titleCtrl.text,
-                    'description': descriptionCtrl.text,
-                    'estimated_cost': double.parse(costCtrl.text),
-                    'priority': priority,
-                    'reason': reasonCtrl.text,
-                    if (selectedEvent != null)
-                      'linked_event': selectedEvent['id'],
-                  };
-
-                  final res = await auth.authService
-                      .post('/api/procurements/', body: body);
-
-                  if (res.statusCode == 201) {
-                    if (mounted) {
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                              'Procurement request submitted successfully!'),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-                      _fetchRequests();
-                    }
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Failed: ${jsonDecode(res.body)}'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error: $e'),
-                      backgroundColor: Colors.red,
+                // Show confirmation dialog
+                showDialog(
+                  context: context,
+                  builder: (confirmCtx) => AlertDialog(
+                    title: const Text('Confirm Request'),
+                    content: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Title: ${titleCtrl.text}'),
+                        if (descriptionCtrl.text.isNotEmpty)
+                          Text('Description: ${descriptionCtrl.text}'),
+                        Text('Estimated Cost: KES ${costCtrl.text}'),
+                        Text('Priority: $priority'),
+                        const SizedBox(height: 16),
+                        const Text('Are these details correct?',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      ],
                     ),
-                  );
-                }
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(confirmCtx),
+                        child: const Text('Cancel'),
+                      ),
+                      FilledButton(
+                        onPressed: () async {
+                          Navigator.pop(confirmCtx);
+                          _submitProcurement(ctx, titleCtrl, descriptionCtrl,
+                              costCtrl, priority, reasonCtrl, selectedEvent);
+                        },
+                        child: const Text('Confirm & Submit'),
+                      ),
+                    ],
+                  ),
+                );
               },
               icon: const Icon(Icons.send),
               label: const Text('Submit Request'),
@@ -240,6 +309,64 @@ class _ProcurementPageState extends State<ProcurementPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _approveRequest(int requestId) async {
+    try {
+      final auth = context.read<AuthProvider>();
+      final res = await auth.authService.patch(
+        '/api/procurements/$requestId/status/',
+        body: {'status': 'approved'},
+      );
+      if (res.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Request approved successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _fetchRequests();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Failed: ${res.body}'),
+              backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _rejectRequest(int requestId, String reason) async {
+    try {
+      final auth = context.read<AuthProvider>();
+      final res = await auth.authService.patch(
+        '/api/procurements/$requestId/status/',
+        body: {'status': 'rejected', 'reason': reason},
+      );
+      if (res.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Request rejected'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        _fetchRequests();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Failed: ${res.body}'),
+              backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   @override
@@ -273,49 +400,55 @@ class _ProcurementPageState extends State<ProcurementPage> {
               ],
             ),
           ),
+          TabBar(
+            controller: _tabController,
+            tabs: const [
+              Tab(text: 'All Requests'),
+              Tab(text: 'History'),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                const Text('Filter: '),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('All'),
+                  selected: _filterStatus == 'all',
+                  onSelected: (_) => setState(() => _filterStatus = 'all'),
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('Pending'),
+                  selected: _filterStatus == 'pending',
+                  onSelected: (_) => setState(() => _filterStatus = 'pending'),
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('Approved'),
+                  selected: _filterStatus == 'approved',
+                  onSelected: (_) => setState(() => _filterStatus = 'approved'),
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('Rejected'),
+                  selected: _filterStatus == 'rejected',
+                  onSelected: (_) => setState(() => _filterStatus = 'rejected'),
+                ),
+              ],
+            ),
+          ),
           Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _error != null
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(_error!),
-                            const SizedBox(height: 16),
-                            FilledButton(
-                              onPressed: _fetchRequests,
-                              child: const Text('Retry'),
-                            ),
-                          ],
-                        ),
-                      )
-                    : _requests.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.inbox,
-                                    size: 64, color: Colors.grey[400]),
-                                const SizedBox(height: 16),
-                                const Text('No procurement requests'),
-                                const SizedBox(height: 8),
-                                FilledButton.icon(
-                                  onPressed: _showCreateRequestDialog,
-                                  icon: const Icon(Icons.add),
-                                  label: const Text('Create Request'),
-                                ),
-                              ],
-                            ),
-                          )
-                        : ListView.builder(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            itemCount: _requests.length,
-                            itemBuilder: (ctx, i) => _ProcurementTile(
-                              request: _requests[i],
-                              statusColor: _statusColor,
-                            ),
-                          ),
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                // All Requests tab
+                _buildRequestsList(),
+                // History tab
+                _buildRequestsList(),
+              ],
+            ),
           ),
         ],
       ),
@@ -326,12 +459,70 @@ class _ProcurementPageState extends State<ProcurementPage> {
       ),
     );
   }
+
+  Widget _buildRequestsList() {
+    return Expanded(
+      child: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(_error!),
+                      const SizedBox(height: 16),
+                      FilledButton(
+                        onPressed: _fetchRequests,
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                )
+              : _filteredRequests.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.inbox, size: 64, color: Colors.grey[400]),
+                          const SizedBox(height: 16),
+                          const Text('No procurement requests'),
+                          const SizedBox(height: 8),
+                          FilledButton.icon(
+                            onPressed: _showCreateRequestDialog,
+                            icon: const Icon(Icons.add),
+                            label: const Text('Create Request'),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: _filteredRequests.length,
+                      itemBuilder: (ctx, i) => _ProcurementTile(
+                        request: _filteredRequests[i],
+                        statusColor: _statusColor,
+                        onApprove: (id) => _approveRequest(id),
+                        onReject: (id, reason) => _rejectRequest(id, reason),
+                        onRefresh: _fetchRequests,
+                      ),
+                    ),
+    );
+  }
 }
 
 class _ProcurementTile extends StatelessWidget {
-  const _ProcurementTile({required this.request, required this.statusColor});
+  const _ProcurementTile({
+    required this.request,
+    required this.statusColor,
+    required this.onApprove,
+    required this.onReject,
+    required this.onRefresh,
+  });
   final dynamic request;
   final Color Function(String) statusColor;
+  final void Function(int) onApprove;
+  final void Function(int, String) onReject;
+  final VoidCallback onRefresh;
 
   String _formatAmount(dynamic amount) {
     if (amount == null) return 'KSH 0.00';
@@ -433,6 +624,10 @@ class _ProcurementTile extends StatelessWidget {
     final reason = request['reason'] ?? 'No justification provided';
     final requestedBy = request['requested_by']?['username'] ?? 'Unknown';
     final linkedEvent = request['linked_event']?['title'];
+    final auth = context.read<AuthProvider>();
+    final userRole = auth.user?.role ?? '';
+    final isProcurement = userRole == 'procurement';
+    final canApprove = isProcurement && status == 'pending';
 
     showModalBottomSheet(
       context: context,
@@ -441,9 +636,9 @@ class _ProcurementTile extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        minChildSize: 0.3,
-        maxChildSize: 0.9,
+        initialChildSize: 0.7,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
         expand: false,
         builder: (_, scrollController) => SingleChildScrollView(
           controller: scrollController,
@@ -506,6 +701,32 @@ class _ProcurementTile extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               Text(reason),
+              if (canApprove) ...[
+                const SizedBox(height: 32),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => onReject(request['id'], ''),
+                        icon: const Icon(Icons.close, color: Colors.red),
+                        label: const Text('Reject'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          side: const BorderSide(color: Colors.red),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () => onApprove(request['id']),
+                        icon: const Icon(Icons.check),
+                        label: const Text('Approve'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
