@@ -111,11 +111,47 @@ class _ProfilePageState extends State<ProfilePage> {
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
-                  onPressed: () {
-                    setState(() => _isEditing = false);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Profile updated (mock)')),
-                    );
+                  onPressed: () async {
+                    final auth = context.read<AuthProvider>();
+                    try {
+                      final res = await auth.authService.patch(
+                        '/api/auth/me/',
+                        body: {
+                          'username': _usernameController.text,
+                          'email': _emailController.text,
+                        },
+                      );
+                      if (res.statusCode == 200) {
+                        if (mounted) {
+                          setState(() => _isEditing = false);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Profile updated!'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                          await auth.init();
+                        }
+                      } else {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Update failed: ${res.body}'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Error: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
                   },
                   icon: const Icon(Icons.save),
                   label: const Text('Save Changes'),

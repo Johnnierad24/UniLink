@@ -145,8 +145,13 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / "staticfiles"
-MEDIA_URL = 'media/'
+MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / "media"
+
+# Admin site settings
+ADMIN_SITE_HEADER = "UniLink Administration"
+ADMIN_SITE_TITLE = "UniLink Admin"
+ADMIN_INDEX_TITLE = "Campus Management"
 
 AUTH_USER_MODEL = "accounts.User"
 
