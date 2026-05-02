@@ -182,7 +182,7 @@ class _EventCard extends StatelessWidget {
   bool _isStudent(BuildContext context) {
     try {
       final auth = context.read<AuthProvider>();
-      return auth.user?.role == 'student';
+      return auth.user?.isStudent ?? false;
     } catch (_) {
       return false;
     }
@@ -504,6 +504,29 @@ class _EventCard extends StatelessWidget {
     final location = event['location'] ?? 'TBD';
     final category = event['category'] ?? 'Other';
     final startTime = event['start_time'];
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    final detailsButtonStyle = TextButton.styleFrom(
+      foregroundColor:
+          isDark ? colorScheme.secondary : colorScheme.primary,
+      backgroundColor:
+          isDark ? colorScheme.secondary.withValues(alpha: 0.14) : null,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: isDark
+            ? BorderSide(color: colorScheme.secondary.withValues(alpha: 0.35))
+            : BorderSide.none,
+      ),
+    );
+
+    final registerButtonStyle = FilledButton.styleFrom(
+      backgroundColor: isDark ? colorScheme.secondary : colorScheme.primary,
+      foregroundColor: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+    );
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -539,12 +562,14 @@ class _EventCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton(
+                  style: detailsButtonStyle,
                   onPressed: () => _showEventDetails(context),
                   child: const Text('View Details'),
                 ),
                 if (_isStudent(context)) ...[
                   const SizedBox(width: 8),
                   FilledButton(
+                    style: registerButtonStyle,
                     onPressed: () => _showRegistrationDialog(context),
                     child: const Text('Register'),
                   ),

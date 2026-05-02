@@ -461,51 +461,55 @@ class _ProcurementPageState extends State<ProcurementPage>
   }
 
   Widget _buildRequestsList() {
-    return Expanded(
-      child: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(_error!),
-                      const SizedBox(height: 16),
-                      FilledButton(
-                        onPressed: _fetchRequests,
-                        child: const Text('Retry'),
-                      ),
-                    ],
-                  ),
-                )
-              : _filteredRequests.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.inbox, size: 64, color: Colors.grey[400]),
-                          const SizedBox(height: 16),
-                          const Text('No procurement requests'),
-                          const SizedBox(height: 8),
-                          FilledButton.icon(
-                            onPressed: _showCreateRequestDialog,
-                            icon: const Icon(Icons.add),
-                            label: const Text('Create Request'),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: _filteredRequests.length,
-                      itemBuilder: (ctx, i) => _ProcurementTile(
-                        request: _filteredRequests[i],
-                        statusColor: _statusColor,
-                        onApprove: (id) => _approveRequest(id),
-                        onReject: (id, reason) => _rejectRequest(id, reason),
-                        onRefresh: _fetchRequests,
-                      ),
-                    ),
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(_error!),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: _fetchRequests,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_filteredRequests.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inbox, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            const Text('No procurement requests'),
+            const SizedBox(height: 8),
+            FilledButton.icon(
+              onPressed: _showCreateRequestDialog,
+              icon: const Icon(Icons.add),
+              label: const Text('Create Request'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      itemCount: _filteredRequests.length,
+      itemBuilder: (ctx, i) => _ProcurementTile(
+        request: _filteredRequests[i],
+        statusColor: _statusColor,
+        onApprove: (id) => _approveRequest(id),
+        onReject: (id, reason) => _rejectRequest(id, reason),
+        onRefresh: _fetchRequests,
+      ),
     );
   }
 }
@@ -615,6 +619,63 @@ class _ProcurementTile extends StatelessWidget {
     );
   }
 
+  Future<void> _showRejectReasonDialog(
+    BuildContext context,
+    BuildContext sheetContext,
+  ) async {
+    final reasonCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.close, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Reject Request'),
+          ],
+        ),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: reasonCtrl,
+            autofocus: true,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'Reason for rejection',
+              hintText: 'Enter the reason for rejecting this request',
+            ),
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return 'Rejection reason is required';
+              }
+              return null;
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (!(formKey.currentState?.validate() ?? false)) {
+                return;
+              }
+              Navigator.pop(dialogCtx);
+              Navigator.pop(sheetContext);
+              onReject(request['id'], reasonCtrl.text.trim());
+            },
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Reject Request'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showRequestDetails(BuildContext context) {
     final title = request['title'] ?? 'Unknown';
     final description = request['description'] ?? 'No description';
@@ -625,9 +686,9 @@ class _ProcurementTile extends StatelessWidget {
     final requestedBy = request['requested_by']?['username'] ?? 'Unknown';
     final linkedEvent = request['linked_event']?['title'];
     final auth = context.read<AuthProvider>();
-    final userRole = auth.user?.role ?? '';
-    final isProcurement = userRole == 'procurement';
-    final canApprove = isProcurement && status == 'pending';
+    final user = auth.user;
+    final canApprove =
+        (user?.canApproveProcurement ?? false) && status == 'pending';
 
     showModalBottomSheet(
       context: context,
@@ -707,7 +768,8 @@ class _ProcurementTile extends StatelessWidget {
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () => onReject(request['id'], ''),
+                        onPressed: () =>
+                            _showRejectReasonDialog(context, ctx),
                         icon: const Icon(Icons.close, color: Colors.red),
                         label: const Text('Reject'),
                         style: OutlinedButton.styleFrom(
@@ -719,7 +781,10 @@ class _ProcurementTile extends StatelessWidget {
                     const SizedBox(width: 16),
                     Expanded(
                       child: FilledButton.icon(
-                        onPressed: () => onApprove(request['id']),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          onApprove(request['id']);
+                        },
                         icon: const Icon(Icons.check),
                         label: const Text('Approve'),
                       ),

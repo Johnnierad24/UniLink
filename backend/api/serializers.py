@@ -1,5 +1,35 @@
 from rest_framework import serializers
-from .models import Campus, Event, Announcement, Resource, Booking, ProcurementRequest, ScheduleEntry, StudentEnrollment
+
+from accounts.models import User
+
+from .models import (
+    Announcement,
+    Booking,
+    Campus,
+    Event,
+    ProcurementRequest,
+    Resource,
+    ScheduleEntry,
+    StudentEnrollment,
+)
+
+
+class UserSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ["id", "username", "email", "role"]
+
+
+class EventBriefSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Event
+        fields = ["id", "title"]
+
+
+class ResourceBriefSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Resource
+        fields = ["id", "name", "type", "location", "capacity"]
 
 
 class CampusSerializer(serializers.ModelSerializer):
@@ -63,6 +93,11 @@ class AnnouncementSerializer(serializers.ModelSerializer):
 
 
 class ResourceSerializer(serializers.ModelSerializer):
+    campus = CampusSerializer(read_only=True)
+    campus_id = serializers.PrimaryKeyRelatedField(
+        queryset=Campus.objects.all(), source="campus", write_only=True
+    )
+
     class Meta:
         model = Resource
         fields = [
@@ -73,11 +108,13 @@ class ResourceSerializer(serializers.ModelSerializer):
             "capacity",
             "amenities",
             "campus",
+            "campus_id",
             "created_at",
         ]
 
 
 class BookingSerializer(serializers.ModelSerializer):
+    resource = serializers.PrimaryKeyRelatedField(queryset=Resource.objects.all())
     user = serializers.HiddenField(default=serializers.CurrentUserDefault())
 
     class Meta:
@@ -93,12 +130,25 @@ class BookingSerializer(serializers.ModelSerializer):
             "status",
             "created_at",
         ]
-        read_only_fields = ["status", "created_at"]
+        read_only_fields = ["created_at"]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["resource"] = ResourceBriefSerializer(instance.resource).data
+        data["user"] = UserSummarySerializer(instance.user).data
+        return data
+
+    def validate_status(self, value):
+        if not self.instance:
+            return value
+        if value != Booking.Status.CANCELLED:
+            raise serializers.ValidationError("Only cancellation is supported through this endpoint.")
+        return value
 
     def validate(self, attrs):
         start = attrs.get("start_time")
         end = attrs.get("end_time")
-        resource = attrs.get("resource")
+        resource = attrs.get("resource") or getattr(self.instance, "resource", None)
         if start and end and end <= start:
             raise serializers.ValidationError("end_time must be after start_time")
         if resource and start and end:
@@ -117,6 +167,9 @@ class BookingSerializer(serializers.ModelSerializer):
 
 class ProcurementRequestSerializer(serializers.ModelSerializer):
     requested_by = serializers.HiddenField(default=serializers.CurrentUserDefault())
+    linked_event = serializers.PrimaryKeyRelatedField(
+        queryset=Event.objects.all(), allow_null=True, required=False
+    )
     approved_by = serializers.SerializerMethodField()
 
     class Meta:
@@ -135,11 +188,19 @@ class ProcurementRequestSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["status", "reason", "approved_by", "created_at", "updated_at"]
+        read_only_fields = ["status", "approved_by", "created_at", "updated_at"]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["requested_by"] = UserSummarySerializer(instance.requested_by).data
+        data["linked_event"] = (
+            EventBriefSerializer(instance.linked_event).data if instance.linked_event else None
+        )
+        return data
 
     def get_approved_by(self, obj):
         if obj.approved_by:
-            return {"id": obj.approved_by.id, "username": obj.approved_by.username}
+            return UserSummarySerializer(obj.approved_by).data
         return None
 
 
@@ -150,8 +211,13 @@ class ProcurementStatusSerializer(serializers.ModelSerializer):
 
 
 class ScheduleEntrySerializer(serializers.ModelSerializer):
-    lecturer = serializers.StringRelatedField(read_only=True)
+    lecturer = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(), allow_null=True, required=False
+    )
     campus = CampusSerializer(read_only=True)
+    campus_id = serializers.PrimaryKeyRelatedField(
+        queryset=Campus.objects.all(), source="campus", write_only=True
+    )
     department = serializers.SerializerMethodField()
 
     class Meta:
@@ -167,11 +233,19 @@ class ScheduleEntrySerializer(serializers.ModelSerializer):
             "lecturer",
             "audience",
             "campus",
+            "campus_id",
             "department",
             "is_postponed",
             "postponed_reason",
             "created_at",
         ]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["lecturer"] = (
+            UserSummarySerializer(instance.lecturer).data if instance.lecturer else None
+        )
+        return data
 
     def get_department(self, obj):
         if hasattr(obj, 'department') and obj.department:

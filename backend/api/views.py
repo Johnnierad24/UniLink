@@ -90,10 +90,10 @@ class ProcurementRequestViewSet(viewsets.ModelViewSet):
         if user.is_anonymous:
             return qs.none()
         # Procurement staff sees ALL requests submitted by non-procurement users
-        if user.role == "procurement":
-            return qs.exclude(requested_by__role="procurement")
+        if user.role == user.Role.PROCUREMENT:
+            return qs.exclude(requested_by__role=user.Role.PROCUREMENT)
         # Admin, staff, director, coordinator see all requests
-        if user.role in ["admin", "staff", "director", "coordinator"]:
+        if user.can_view_procurement:
             return qs
         return qs.filter(requested_by=user)
 
@@ -102,7 +102,7 @@ class ProcurementRequestViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["patch"], permission_classes=[IsAuthenticated])
     def status(self, request, pk=None):
-        if request.user.role not in ["admin", "staff", "procurement"]:
+        if not request.user.can_approve_procurement:
             return Response(status=status.HTTP_403_FORBIDDEN)
         instance = self.get_object()
         serializer = ProcurementStatusSerializer(instance, data=request.data, partial=True)
@@ -124,9 +124,9 @@ class ScheduleEntryViewSet(viewsets.ModelViewSet):
         qs = super().get_queryset()
         user = self.request.user
         if user.is_authenticated:
-            if user.role == "lecturer":
+            if user.role == user.Role.LECTURER:
                 return qs.filter(lecturer=user)
-            elif user.role == "student" and user.department:
+            elif user.role == user.Role.STUDENT and user.department:
                 return qs.filter(department=user.department)
         return qs
 
@@ -135,7 +135,7 @@ class ScheduleEntryViewSet(viewsets.ModelViewSet):
         from .models import StudentEnrollment
         entry = self.get_object()
         
-        if request.user.role != "lecturer":
+        if request.user.role != request.user.Role.LECTURER:
             return Response(
                 {"error": "Only lecturers can postpone classes"},
                 status=status.HTTP_403_FORBIDDEN

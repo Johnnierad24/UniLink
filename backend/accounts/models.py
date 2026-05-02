@@ -6,6 +6,9 @@ class User(AbstractUser):
     class Role(models.TextChoices):
         STUDENT = "student", "Student"
         LECTURER = "lecturer", "Lecturer"
+        DIRECTOR = "director", "Director"
+        COORDINATOR = "coordinator", "Coordinator"
+        PROCUREMENT = "procurement", "Procurement Officer"
         STAFF = "staff", "Staff"
         ADMIN = "admin", "Admin"
 
@@ -26,5 +29,32 @@ class User(AbstractUser):
 
     def __str__(self):
         return f"{self.username} ({self.role})"
+
+    @property
+    def can_manage_content(self) -> bool:
+        return self.role in {
+            self.Role.STAFF,
+            self.Role.ADMIN,
+            self.Role.DIRECTOR,
+            self.Role.COORDINATOR,
+        }
+
+    @property
+    def can_view_procurement(self) -> bool:
+        return self.role in {
+            self.Role.PROCUREMENT,
+            self.Role.DIRECTOR,
+            self.Role.COORDINATOR,
+            self.Role.STAFF,
+            self.Role.ADMIN,
+        }
+
+    @property
+    def can_approve_procurement(self) -> bool:
+        return self.role in {
+            self.Role.PROCUREMENT,
+            self.Role.STAFF,
+            self.Role.ADMIN,
+        }
 
 # Create your models here.

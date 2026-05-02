@@ -34,6 +34,32 @@ class BookingOverlapTest(TestCase):
         )
         self.assertEqual(resp.status_code, 400)
 
+    def test_booking_list_returns_nested_resource(self):
+        start = timezone.now()
+        end = start + timezone.timedelta(hours=1)
+        Booking.objects.create(resource=self.resource, user=self.user, start_time=start, end_time=end)
+        resp = self.client.get(reverse("booking-list"))
+        self.assertEqual(resp.status_code, 200)
+        booking = resp.data["results"][0]
+        self.assertIsInstance(booking["resource"], dict)
+        self.assertEqual(booking["resource"]["name"], self.resource.name)
+
+    def test_booking_owner_can_cancel(self):
+        booking = Booking.objects.create(
+            resource=self.resource,
+            user=self.user,
+            start_time=timezone.now(),
+            end_time=timezone.now() + timezone.timedelta(hours=1),
+        )
+        resp = self.client.patch(
+            reverse("booking-detail", args=[booking.id]),
+            {"status": Booking.Status.CANCELLED},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, Booking.Status.CANCELLED)
+
 
 class AuthLoginTest(TestCase):
     def setUp(self):
@@ -113,6 +139,24 @@ class ProcurementTransitionTest(TestCase):
         resp = self.client.patch(url, {"status": "approved"}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
+    def test_procurement_list_returns_nested_requested_by_and_event(self):
+        campus = Campus.objects.create(name="West", location="Meru")
+        event = self.pr.linked_event = campus.events.create(
+            title="Science Fair",
+            description="",
+            location="Hall A",
+            category="academic",
+            start_time=timezone.now(),
+            end_time=timezone.now() + timezone.timedelta(hours=2),
+        )
+        self.pr.save()
+
+        resp = self.client.get(reverse("procurement-list"))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        procurement = resp.data["results"][0]
+        self.assertEqual(procurement["requested_by"]["username"], self.user.username)
+        self.assertEqual(procurement["linked_event"]["title"], event.title)
+
 
 class ScheduleCrudTest(TestCase):
     def setUp(self):
@@ -124,7 +168,7 @@ class ScheduleCrudTest(TestCase):
     def test_schedule_requires_staff(self):
         url = reverse("schedule-list")
         data = {
-            "campus": self.campus.id,
+            "campus_id": self.campus.id,
             "title": "Algorithms",
             "course_code": "CS-101",
             "room": "101",
@@ -139,3 +183,27 @@ class ScheduleCrudTest(TestCase):
         self.client.force_authenticate(self.staff)
         resp = self.client.post(url, data, format="json")
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+    def test_schedule_list_returns_nested_lecturer(self):
+        lecturer = User.objects.create_user(
+            username="lecturer1",
+            email="lecturer@example.com",
+            password="pass",
+            role="lecturer",
+        )
+        entry = ScheduleEntry.objects.create(
+            campus=self.campus,
+            title="Algorithms",
+            course_code="CS-101",
+            room="101",
+            start_time=timezone.now(),
+            end_time=timezone.now() + timezone.timedelta(hours=1),
+            lecturer=lecturer,
+            audience="student",
+        )
+        self.client.force_authenticate(lecturer)
+        resp = self.client.get(reverse("schedule-list"))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        schedule = resp.data["results"][0]
+        self.assertEqual(schedule["id"], entry.id)
+        self.assertEqual(schedule["lecturer"]["username"], lecturer.username)

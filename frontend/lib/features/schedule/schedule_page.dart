@@ -34,18 +34,15 @@ class _SchedulePageState extends State<SchedulePage> {
 
     try {
       final auth = context.read<AuthProvider>();
-      final role = auth.user?.role ?? 'student';
+      final user = auth.user;
       final userId = auth.user?.id;
 
       String scheduleEndpoint = '/api/schedule/';
       // Lecturers see their own schedule, students see their department's
       // Directors/coordinators/staff see all schedules
-      if (role == 'lecturer') {
+      if (user?.isLecturer ?? false) {
         scheduleEndpoint = '/api/schedule/?lecturer=$userId';
-      } else if (role != 'director' &&
-          role != 'coordinator' &&
-          role != 'admin' &&
-          role != 'staff') {
+      } else if (!(user?.canViewAllSchedules ?? false)) {
         // Students - show all for now so they can see data
         scheduleEndpoint = '/api/schedule/';
       }
@@ -78,7 +75,7 @@ class _SchedulePageState extends State<SchedulePage> {
   bool get _isLecturer {
     try {
       final auth = context.read<AuthProvider>();
-      return auth.user?.role == 'lecturer';
+      return auth.user?.isLecturer ?? false;
     } catch (_) {
       return false;
     }

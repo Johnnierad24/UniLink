@@ -36,8 +36,8 @@ class _HomeShellState extends State<HomeShell> {
 
   List<NavigationDestination> _getDestinations() {
     final auth = context.read<AuthProvider>();
-    final role = auth.user?.role ?? 'student';
-    final isProcurement = role == 'procurement';
+    final user = auth.user;
+    final isProcurement = user?.isProcurement ?? false;
 
     final destinations = <NavigationDestination>[
       const NavigationDestination(
@@ -68,8 +68,7 @@ class _HomeShellState extends State<HomeShell> {
     ));
 
     // Procurement tab visible to: procurement, director, coordinator
-    final canViewProcurement =
-        role == 'procurement' || role == 'director' || role == 'coordinator';
+    final canViewProcurement = user?.canViewProcurement ?? false;
     if (canViewProcurement) {
       destinations.add(NavigationDestination(
         icon: const Icon(Icons.shopping_cart_outlined),
@@ -89,10 +88,9 @@ class _HomeShellState extends State<HomeShell> {
 
   Widget _getPage(int index) {
     final auth = context.read<AuthProvider>();
-    final role = auth.user?.role ?? 'student';
-    final isProcurement = role == 'procurement';
-    final canViewProcurement =
-        role == 'procurement' || role == 'director' || role == 'coordinator';
+    final user = auth.user;
+    final isProcurement = user?.isProcurement ?? false;
+    final canViewProcurement = user?.canViewProcurement ?? false;
 
     // Build page list based on role
     final pages = <Widget>[

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/models/user_role.dart';
 import '../../core/services/auth_provider.dart';
 
 class BookingsPage extends StatefulWidget {
@@ -91,10 +92,10 @@ class _BookingsPageState extends State<BookingsPage> {
 
   void _showBookingDialog(dynamic resource) {
     final auth = context.read<AuthProvider>();
-    final userRole = auth.user?.role ?? 'student';
+    final userRole = auth.user?.role ?? UserRole.student;
 
     final studentAllowedTypes = ['study_room', 'collab_zone', 'laboratory'];
-    if (userRole == 'student' &&
+    if (userRole == UserRole.student &&
         !studentAllowedTypes.contains(resource['type'])) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config.dart';
+import '../models/user_role.dart';
 
 class AuthService {
   static const _accessKey = 'unilink_access';
@@ -118,7 +119,7 @@ class UserInfo {
   final int id;
   final String username;
   final String? email;
-  final String role;
+  final UserRole role;
   final int? campusId;
   final int? departmentId;
 
@@ -134,17 +135,22 @@ class UserInfo {
         id: json['id'],
         username: json['username'],
         email: json['email'],
-        role: json['role'],
+        role: UserRole.fromApi(json['role']),
         campusId: json['campus_id'],
         departmentId: json['department_id'],
       );
 
-  bool get isStaff =>
-      role == 'staff' ||
-      role == 'admin' ||
-      role == 'procurement' ||
-      role == 'director' ||
-      role == 'coordinator';
+  UserCapabilities get capabilities => UserCapabilities(role);
+  bool get isStudent => capabilities.isStudent;
+  bool get isLecturer => capabilities.isLecturer;
+  bool get isProcurement => capabilities.isProcurement;
+  bool get isDirector => capabilities.isDirector;
+  bool get isCoordinator => capabilities.isCoordinator;
+  bool get isStaff => capabilities.isStaffLike;
+  bool get canViewProcurement => capabilities.canViewProcurement;
+  bool get canApproveProcurement => capabilities.canApproveProcurement;
+  bool get canUseBookings => capabilities.canUseBookings;
+  bool get canViewAllSchedules => capabilities.canViewAllSchedules;
 }
 
 class AuthResult {

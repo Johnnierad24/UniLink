@@ -14,7 +14,7 @@ class BaseRLSPermission(permissions.BasePermission):
     - admin_roles: roles that can access all records
     """
     owner_field = 'user'
-    admin_roles = {'admin', 'staff'}
+    admin_roles = {'admin', 'staff', 'director', 'coordinator', 'procurement'}
     
     def has_permission(self, request, view):
         return request.user and request.user.is_authenticated

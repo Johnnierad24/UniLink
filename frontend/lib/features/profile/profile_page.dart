@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/models/user_role.dart';
 import '../../core/services/auth_provider.dart';
 import '../../core/services/theme_provider.dart';
 
@@ -176,7 +177,7 @@ class _ProfilePageState extends State<ProfilePage> {
               _ProfileItem(
                 icon: Icons.group,
                 label: 'Role',
-                value: user.role.toUpperCase(),
+                value: user.role.label,
               ),
               _ProfileItem(
                 icon: Icons.school,
