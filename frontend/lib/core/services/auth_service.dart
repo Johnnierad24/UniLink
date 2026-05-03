@@ -119,6 +119,7 @@ class UserInfo {
   final int id;
   final String username;
   final String? email;
+  final String? universityId;
   final UserRole role;
   final int? campusId;
   final int? departmentId;
@@ -127,6 +128,7 @@ class UserInfo {
       {required this.id,
       required this.username,
       this.email,
+      this.universityId,
       required this.role,
       this.campusId,
       this.departmentId});
@@ -135,6 +137,7 @@ class UserInfo {
         id: json['id'],
         username: json['username'],
         email: json['email'],
+        universityId: json['university_id']?.toString(),
         role: UserRole.fromApi(json['role']),
         campusId: json['campus_id'],
         departmentId: json['department_id'],
@@ -147,6 +150,7 @@ class UserInfo {
   bool get isDirector => capabilities.isDirector;
   bool get isCoordinator => capabilities.isCoordinator;
   bool get isStaff => capabilities.isStaffLike;
+  bool get isAdmin => role == UserRole.admin;
   bool get canViewProcurement => capabilities.canViewProcurement;
   bool get canApproveProcurement => capabilities.canApproveProcurement;
   bool get canUseBookings => capabilities.canUseBookings;

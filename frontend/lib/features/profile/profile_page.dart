@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../core/models/user_role.dart';
 import '../../core/services/auth_provider.dart';
 import '../../core/services/theme_provider.dart';
 
@@ -15,6 +14,8 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _isEditing = false;
   late TextEditingController _usernameController;
   late TextEditingController _emailController;
+  late TextEditingController _universityIdController;
+  late TextEditingController _campusController;
 
   @override
   void initState() {
@@ -22,12 +23,16 @@ class _ProfilePageState extends State<ProfilePage> {
     final user = context.read<AuthProvider>().user;
     _usernameController = TextEditingController(text: user?.username ?? '');
     _emailController = TextEditingController(text: user?.email ?? '');
+    _universityIdController = TextEditingController(text: user?.universityId ?? '');
+    _campusController = TextEditingController(text: user?.campusId?.toString() ?? '');
   }
 
   @override
   void dispose() {
     _usernameController.dispose();
     _emailController.dispose();
+    _universityIdController.dispose();
+    _campusController.dispose();
     super.dispose();
   }
 
@@ -108,6 +113,25 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 keyboardType: TextInputType.emailAddress,
               ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _universityIdController,
+                decoration: const InputDecoration(
+                  labelText: 'University ID',
+                  prefixIcon: Icon(Icons.badge),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _campusController,
+                decoration: const InputDecoration(
+                  labelText: 'Campus ID',
+                  prefixIcon: Icon(Icons.school),
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.number,
+              ),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
@@ -115,12 +139,15 @@ class _ProfilePageState extends State<ProfilePage> {
                   onPressed: () async {
                     final auth = context.read<AuthProvider>();
                     try {
+                      final body = {
+                        'username': _usernameController.text,
+                        'email': _emailController.text,
+                        'university_id': _universityIdController.text,
+                        'campus': _campusController.text.isNotEmpty ? int.parse(_campusController.text) : null,
+                      };
                       final res = await auth.authService.patch(
                         '/api/auth/me/',
-                        body: {
-                          'username': _usernameController.text,
-                          'email': _emailController.text,
-                        },
+                        body: body,
                       );
                       if (res.statusCode == 200) {
                         if (mounted) {
@@ -172,7 +199,7 @@ class _ProfilePageState extends State<ProfilePage> {
               _ProfileItem(
                 icon: Icons.badge,
                 label: 'University ID',
-                value: 'Not set',
+                value: user.universityId ?? 'Not set',
               ),
               _ProfileItem(
                 icon: Icons.group,
@@ -184,11 +211,12 @@ class _ProfilePageState extends State<ProfilePage> {
                 label: 'Campus',
                 value: user.campusId?.toString() ?? 'Not assigned',
               ),
-              _ProfileItem(
-                icon: Icons.business,
-                label: 'Department',
-                value: user.departmentId?.toString() ?? 'Not assigned',
-              ),
+              if (!user.isProcurement && !user.isAdmin)
+                _ProfileItem(
+                  icon: Icons.business,
+                  label: 'Department',
+                  value: user.departmentId?.toString() ?? 'Not assigned',
+                ),
             ],
             const SizedBox(height: 32),
             const Divider(),

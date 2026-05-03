@@ -252,6 +252,40 @@ class ScheduleEntrySerializer(serializers.ModelSerializer):
             return {"id": obj.department.id, "name": obj.department.name}
         return None
 
+    def validate(self, attrs):
+        """Limit lecturers to 2 units per day (except Sunday)"""
+        lecturer = attrs.get('lecturer') or (self.instance.lecturer if self.instance else None)
+        start_time = attrs.get('start_time') or (self.instance.start_time if self.instance else None)
+        
+        if lecturer and start_time:
+            # Check if lecturer is a lecturer role
+            if hasattr(lecturer, 'role') and lecturer.role == User.Role.LECTURER:
+                # Sunday (weekday 6 in Python) has no limit
+                if start_time.weekday() != 6:  # Not Sunday
+                    # Count existing schedule entries for this lecturer on the same day
+                    from django.db.models import Q
+                    from datetime import datetime, time
+                    
+                    # Get start of day and end of day
+                    day_start = datetime.combine(start_time.date(), time.min)
+                    day_end = datetime.combine(start_time.date(), time.max)
+                    
+                    # Count entries for this lecturer on this day
+                    existing_count = ScheduleEntry.objects.filter(
+                        lecturer=lecturer,
+                        start_time__date=start_time.date()
+                    )
+                    # Exclude current instance if updating
+                    if self.instance:
+                        existing_count = existing_count.exclude(pk=self.instance.pk)
+                    
+                    if existing_count.count() >= 2:
+                        raise serializers.ValidationError(
+                            "Lecturers are limited to 2 units per day (except Sunday)."
+                        )
+        
+        return attrs
+
 
 class PostponeClassSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True, max_length=500)

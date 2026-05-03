@@ -61,11 +61,14 @@ class _HomeShellState extends State<HomeShell> {
       ));
     }
 
-    destinations.add(const NavigationDestination(
-      icon: Icon(Icons.schedule_outlined),
-      selectedIcon: Icon(Icons.schedule),
-      label: 'Schedule',
-    ));
+    // Hide Schedule tab for procurement officer
+    if (!isProcurement) {
+      destinations.add(const NavigationDestination(
+        icon: Icon(Icons.schedule_outlined),
+        selectedIcon: Icon(Icons.schedule),
+        label: 'Schedule',
+      ));
+    }
 
     // Procurement tab visible to: procurement, director, coordinator
     final canViewProcurement = user?.canViewProcurement ?? false;
@@ -92,12 +95,12 @@ class _HomeShellState extends State<HomeShell> {
     final isProcurement = user?.isProcurement ?? false;
     final canViewProcurement = user?.canViewProcurement ?? false;
 
-    // Build page list based on role
+    // Build page list based on role (must match _getDestinations order)
     final pages = <Widget>[
       const DashboardPage(),
       const EventsPage(),
       if (!isProcurement) const BookingsPage(),
-      const SchedulePage(),
+      if (!isProcurement) const SchedulePage(),
       if (canViewProcurement) const ProcurementPage(),
       const ProfilePage(),
     ];
@@ -255,8 +258,8 @@ class _HomeShellState extends State<HomeShell> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          children: const [
+        title: const Row(
+          children: [
             UniLinkLogo(size: 32),
             SizedBox(width: 12),
             Text('UniLink'),

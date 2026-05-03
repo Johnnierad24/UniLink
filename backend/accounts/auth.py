@@ -37,6 +37,7 @@ class EmailOrIDTokenSerializer(TokenObtainPairSerializer):
             "id": user.id,
             "username": user.username,
             "email": user.email,
+            "university_id": user.university_id,
             "role": user.role,
             "campus_id": user.campus_id,
             "department_id": user.department_id,
